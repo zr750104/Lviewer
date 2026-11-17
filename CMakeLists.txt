@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Lviewer VERSION 1.0.0 LANGUAGES C CXX RC)
+project(Lviewer VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(LVIEWER_TESTS "Build host-side unit tests" OFF)
 
 if(WIN32)
+  enable_language(RC)
   file(GLOB LV_SRC CONFIGURE_DEPENDS src/*.cpp src/core/*.cpp)
   add_executable(Lviewer WIN32 ${LV_SRC} third_party/miniz/miniz.c res/Lviewer.rc)
   target_include_directories(Lviewer PRIVATE src third_party/miniz res)
