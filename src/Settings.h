@@ -14,6 +14,7 @@ struct OtherApp { std::wstring name, path, args; };
 
 struct Settings {
     // general
+    int settingsVersion = 2;        // 2: v1.2.1 defaults (window follows image)
     std::wstring lang;              // "", ja, en, th
     bool multiInstance = true;
     bool restoreLast = false;
@@ -23,14 +24,14 @@ struct Settings {
     bool maximized = false, topMost = false;
     bool caption = true, outerFrame = true, innerFrame = false;
     bool menuBar = false, toolBar = true, statusBar = true, scrollBar = true;
-    bool centerWindow = false, fitWindowToToolbar = true;
+    bool centerWindow = false, fitWindowToToolbar = false;
     // background
     COLORREF bgColor1 = RGB(32, 32, 32), bgColor2 = RGB(48, 48, 48);
     bool bgChecker = false;            // checkerboard for transparent images / background
     int checkerSize = 8;
     COLORREF fsBgColor = RGB(0, 0, 0);
     // display
-    int dispOpt = DispBigToWnd, dispOptFull = DispBigToWnd;
+    int dispOpt = DispBigToDesk, dispOptFull = DispBigToWnd;   // window follows the image: no empty margins
     int fitOpt = FitInside, rotOpt = RotNone;
     int maxFitZoom = 400;             // % (upper bound when enlarging to fit)
     bool zoomLock = false;

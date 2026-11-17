@@ -424,7 +424,7 @@ LRESULT Viewer::OnMain(UINT m, WPARAM w, LPARAM l) {
         case WM_SETTINGCHANGE: case WM_SYSCOLORCHANGE: CreateToolbar(); Layout(); return 0;
         case WM_GETMINMAXINFO: {
             auto* mi = reinterpret_cast<MINMAXINFO*>(l);
-            mi->ptMinTrackSize = {Scale(160, dpi_), Scale(120, dpi_)};
+            mi->ptMinTrackSize = {Scale(120, dpi_), Scale(80, dpi_)};
             return 0;
         }
         case WM_CLOSE:
@@ -583,7 +583,7 @@ void Viewer::FitWindowToImage(bool desk) {
         SIZE s = {}; SendMessageW(tb_, TB_GETMAXSIZE, 0, LPARAM(&s));
         ww = std::max<int>(ww, s.cx + (wr.right - wr.left) - cr.right + Scale(8, dpi_));
     }
-    ww = std::max(ww, Scale(200, dpi_)); wh = std::max(wh, Scale(150, dpi_));
+    ww = std::max(ww, Scale(120, dpi_)); wh = std::max(wh, Scale(80, dpi_));
     int x = wr.left, y = wr.top;
     if (g_set.centerWindow || desk) {
         x = (mi.rcWork.left + mi.rcWork.right - ww) / 2; y = (mi.rcWork.top + mi.rcWork.bottom - wh) / 2;
