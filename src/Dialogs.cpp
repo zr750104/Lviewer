@@ -257,32 +257,8 @@ void Viewer::DlgPreferences() {
     g_set.Save();
 }
 
-void Viewer::DlgMouse() {
-    struct In { unsigned mods, code; const char* label; };
-    static const In ins[] = {
-        {0, MWheelUp, "mouse.WheelUp"}, {0, MWheelDown, "mouse.WheelDown"},
-        {ModCtrl, MWheelUp, "mouse.CtrlWheelUp"}, {ModCtrl, MWheelDown, "mouse.CtrlWheelDown"},
-        {ModShift, MWheelUp, "mouse.ShiftWheelUp"}, {ModShift, MWheelDown, "mouse.ShiftWheelDown"},
-        {0, MLClick, "mouse.LClick"}, {0, MLDbl, "mouse.LDbl"}, {0, MRClick, "mouse.RClick"},
-        {0, MMClick, "mouse.MClick"}, {0, MX1Click, "mouse.X1Click"}, {0, MX2Click, "mouse.X2Click"},
-    };
-    static const int cmds[] = {0, CmdPrevFile, CmdNextFile, CmdDirPrev, CmdDirNext, CmdPrevPage, CmdNextPage, CmdZoomIn, CmdZoomOut,
-                               CmdOriginal, CmdFitWindow, CmdToggleOrigFit, CmdFullScreen, CmdPopupMenu, CmdExit, CmdWndMinimize,
-                               CmdSlideToggle, CmdSelectMode, CmdScrollUpL, CmdScrollDownL, CmdRotL, CmdRotR};
-    const int nc = int(sizeof(cmds) / sizeof(cmds[0]));
-    std::vector<std::wstring> names;
-    for (int c : cmds) names.push_back(c ? CommandLabel(c) : T("misc.none"));
-    const int ni = int(sizeof(ins) / sizeof(ins[0]));
-    std::vector<int> sel(ni, 0), orig(ni, 0);
-    for (int i = 0; i < ni; ++i) {
-        int c = g_keymap.Lookup({ins[i].mods, ins[i].code});
-        for (int k = 0; k < nc; ++k) if (cmds[k] == c) sel[i] = k;
-        orig[i] = sel[i];
-    }
-    Form f(T("cmd.mousesettings"));
-    f.Page(T("mouse.page.buttons"));
-    for (int i = 0; i < ni; ++i) f.Combo(T(ins[i].label), &sel[i], names);
-    f.Page(T("mouse.page.options"));
+bool Viewer::DlgMouseOptions() {
+    Form f(T("mouse.page.options"));
     f.Int(T("mouse.wheelscroll"), &g_set.wheelScroll, 1, 1000, L"px");
     f.Int(T("mouse.dragscroll"), &g_set.dragScrollRate, 1, 10, L"x");
     f.Combo(T("mouse.dragzoomspeed"), &g_set.dragZoomSpeed, {T("mouse.speed.slow"), T("mouse.speed.medium"), T("mouse.speed.fast")});
@@ -299,11 +275,7 @@ void Viewer::DlgMouse() {
         g_set.hoverMinMove = d.hoverMinMove; g_set.activateNoClick = d.activateNoClick; g_set.wheelDull = d.wheelDull;
     });
     f.Label(T("mouse.note"));
-    if (!f.Show(hwnd_)) return;
-    for (int i = 0; i < ni; ++i)
-        if (sel[i] != orig[i]) g_keymap.Bind({ins[i].mods, ins[i].code}, cmds[sel[i]]);
-    RebuildUi();
-    g_set.Save();
+    return f.Show(hwnd_);
 }
 
 void Viewer::DlgApps() {

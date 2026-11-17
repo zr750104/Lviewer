@@ -57,7 +57,8 @@ struct Settings {
     int dragScrollRate = 1;           // multiplier for drag scrolling
     int dragZoomSpeed = 1;            // 0 slow, 1 medium, 2 fast
     int dragZoomDir = 0;              // 0 left->right, 1 right->left, 2 bottom->top, 3 top->bottom (direction that zooms in)
-    int hoverMinMove = 0;             // minimum image pixels per mouse pixel in hover scroll (0 = absolute mapping)
+    int hoverMinMove = 0;
+    int dragAction[5] = {1, 0, 0, 2, 0};   // per button L,R,M,X1,X2: 0 none, 1 scroll/select, 2 zoom, 3 move window             // minimum image pixels per mouse pixel in hover scroll (0 = absolute mapping)
     // updates
     bool updateCheckAtStart = true;
     int lastUpdateCheckDay = 0;

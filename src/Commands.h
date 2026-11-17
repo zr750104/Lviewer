@@ -23,7 +23,11 @@ std::wstring CommandLabel(int id);           // localized, without '&'
 std::wstring StripMnemonic(const std::wstring& s);   // removes '&' and trailing "(&X)"
 
 // ---- key / mouse chords -----------------------------------------------------
-enum : unsigned { ModCtrl = 1, ModShift = 2, ModAlt = 4 };
+enum : unsigned { ModCtrl = 1, ModShift = 2, ModAlt = 4,
+                  // mouse buttons held down while another mouse action happens
+                  ModHoldL = 8, ModHoldR = 16, ModHoldM = 32, ModHoldX1 = 64, ModHoldX2 = 128, ModHoldMask = 248 };
+// mouse button index 0..4 = L, R, M, X1, X2
+inline unsigned HoldBit(int button) { return 8u << button; }
 enum : unsigned {   // pseudo virtual-key codes for mouse input
     MouseBase = 0x1000,
     MWheelUp = MouseBase + 1, MWheelDown, MWheelLeft, MWheelRight,

@@ -84,6 +84,11 @@ bool ParseChord(const std::wstring& in, Chord& out) {
         if (m == L"ctrl") out.mods |= ModCtrl;
         else if (m == L"shift") out.mods |= ModShift;
         else if (m == L"alt") out.mods |= ModAlt;
+        else if (m == L"holdl") out.mods |= ModHoldL;
+        else if (m == L"holdr") out.mods |= ModHoldR;
+        else if (m == L"holdm") out.mods |= ModHoldM;
+        else if (m == L"holdx1") out.mods |= ModHoldX1;
+        else if (m == L"holdx2") out.mods |= ModHoldX2;
         else break;
         s = s.substr(p + 1);
     }
@@ -116,6 +121,8 @@ std::wstring ChordToString(const Chord& c) {
     if (c.mods & ModCtrl) s += L"Ctrl+";
     if (c.mods & ModShift) s += L"Shift+";
     if (c.mods & ModAlt) s += L"Alt+";
+    static const wchar_t* hold[5] = {L"HoldL+", L"HoldR+", L"HoldM+", L"HoldX1+", L"HoldX2+"};
+    for (int b = 0; b < 5; ++b) if (c.mods & HoldBit(b)) s += hold[b];
     return s + CodeName(c.code);
 }
 
@@ -124,6 +131,8 @@ std::wstring ChordToDisplay(const Chord& c) {
     if (c.mods & ModCtrl) s += L"Ctrl+";
     if (c.mods & ModShift) s += L"Shift+";
     if (c.mods & ModAlt) s += L"Alt+";
+    static const char* hold[5] = {"mouse.hold.L", "mouse.hold.R", "mouse.hold.M", "mouse.hold.X1", "mouse.hold.X2"};
+    for (int b = 0; b < 5; ++b) if (c.mods & HoldBit(b)) s += T(hold[b]) + L"+";
     unsigned code = c.code;
     if (code < MouseBase) {
         UINT ch = MapVirtualKeyW(code, MAPVK_VK_TO_CHAR) & 0x7FFF;

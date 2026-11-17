@@ -824,6 +824,90 @@ static unsigned MouseMods(WPARAM w) {
     return m;
 }
 
+unsigned Viewer::HeldMods() const {
+    unsigned m = 0;
+    for (int b = 0; b < 5; ++b) if (btnDown_ & (1u << b)) m |= HoldBit(b);
+    return m;
+}
+
+void Viewer::RunMouseCommand(int cmd, POINT clientPt) {
+    if (cmd == CmdPopupMenu) { POINT s = clientPt; ClientToScreen(view_, &s); ShowPopup(nullptr, s); return; }
+    if (cmd == CmdZoomIn || cmd == CmdZoomOut) { ZoomStep(cmd == CmdZoomIn ? 1 : -1, &clientPt); return; }
+    Execute(cmd);
+}
+
+void Viewer::MouseDown(int b, POINT p, WPARAM w, bool dbl) {
+    SetFocus(view_);
+    static const unsigned dblCode[5] = {MLDbl, MRDbl, MMDbl, MX1Dbl, MX2Dbl};
+    unsigned bit = 1u << b;
+    unsigned heldBefore = HeldMods();
+    btnDown_ |= bit;
+    btnUsed_ &= ~bit;
+    if (dbl && !(b == 0 && selMode_)) {
+        int cmd = g_keymap.Lookup({MouseMods(w) | heldBefore, dblCode[b]});
+        if (cmd) {
+            btnUsed_ |= bit | (btnDown_ & ~bit);   // the second click must not fire a click
+            SetCapture(view_);
+            RunMouseCommand(cmd, p);
+            return;
+        }
+    }
+    if (dragBtn_ >= 0) { SetCapture(view_); return; }   // another button already drives a drag
+    // first button down: it may become a drag
+    dragBtn_ = b; dragging_ = false;
+    downPt_ = lastPt_ = p;
+    dragStartZoom_ = zoom_;
+    POINT sp = p; ClientToScreen(view_, &sp);
+    winStartScreen_ = sp; GetWindowRect(hwnd_, &winStartRect_);
+    int act = g_set.dragAction[b];
+    if (b == 0 && !selMode_ && ((w & MK_CONTROL) || act == DragMoveWindow) && !full_) {
+        // left button: let the system move the window
+        btnDown_ &= ~bit; dragBtn_ = -1;
+        ReleaseCapture();
+        SendMessageW(hwnd_, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+        return;
+    }
+    SetCapture(view_);
+    if (act == DragScroll && selMode_ && img_.valid()) {
+        double ix, iy; ViewToImage(p, ix, iy);
+        int u = std::max(1, g_set.selUnit);
+        selAx_ = std::max(0.0, std::min<double>(img_.w, std::floor(ix / u) * u));
+        selAy_ = std::max(0.0, std::min<double>(img_.h, std::floor(iy / u) * u));
+        selecting_ = true;
+        btnUsed_ |= bit;
+        sel_ = Rect{int(selAx_), int(selAy_), 0, 0};
+        Redraw();
+    }
+}
+
+void Viewer::MouseUp(int b, POINT p, WPARAM w) {
+    static const unsigned clickCode[5] = {MLClick, MRClick, MMClick, MX1Click, MX2Click};
+    unsigned bit = 1u << b;
+    if (!(btnDown_ & bit)) return;
+    btnDown_ &= ~bit;
+    bool used = (btnUsed_ & bit) != 0;
+    btnUsed_ &= ~bit;
+    if (b == dragBtn_) {
+        dragBtn_ = -1;
+        bool wasDrag = dragging_;
+        dragging_ = false;
+        if (selecting_) {
+            selecting_ = false;
+            if (sel_.w == 0 || sel_.h == 0) sel_ = Rect{};
+            Redraw(); UpdateStatus();
+        }
+        if (wasDrag) used = true;
+    }
+    if (!btnDown_ && GetCapture() == view_) ReleaseCapture();
+    if (suppressClick_) { suppressClick_ = false; return; }
+    if (used) return;
+    unsigned held = HeldMods();
+    int cmd = g_keymap.Lookup({MouseMods(w) | held, clickCode[b]});
+    if (!cmd) return;
+    btnUsed_ |= btnDown_;                // the still-held buttons acted as modifiers
+    RunMouseCommand(cmd, p);
+}
+
 LRESULT Viewer::OnView(UINT m, WPARAM w, LPARAM l) {
     switch (m) {
         case WM_PAINT: {
@@ -837,28 +921,24 @@ LRESULT Viewer::OnView(UINT m, WPARAM w, LPARAM l) {
         case WM_MOUSEACTIVATE:
             if (g_set.activateNoClick && GetForegroundWindow() != hwnd_) { suppressClick_ = true; return MA_ACTIVATE; }
             break;
-        case WM_LBUTTONDOWN: {
-            SetFocus(view_);
-            POINT p = {GET_X_LPARAM(l), GET_Y_LPARAM(l)};
-            downPt_ = lastPt_ = p; lDown_ = true; dragging_ = false; lWheelUsed_ = false;
-            if ((w & MK_CONTROL) && !selMode_) {   // Ctrl+drag moves the window
-                lDown_ = false;
-                ReleaseCapture();
-                SendMessageW(hwnd_, WM_NCLBUTTONDOWN, HTCAPTION, 0);
-                return 0;
-            }
-            SetCapture(view_);
-            if (selMode_ && img_.valid()) {
-                double ix, iy; ViewToImage(p, ix, iy);
-                int u = std::max(1, g_set.selUnit);
-                selAx_ = std::max(0.0, std::min<double>(img_.w, std::floor(ix / u) * u));
-                selAy_ = std::max(0.0, std::min<double>(img_.h, std::floor(iy / u) * u));
-                selecting_ = true;
-                sel_ = Rect{int(selAx_), int(selAy_), 0, 0};
-                Redraw();
-            }
-            return 0;
+        case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
+        case WM_RBUTTONDOWN: case WM_RBUTTONDBLCLK:
+        case WM_MBUTTONDOWN: case WM_MBUTTONDBLCLK:
+        case WM_XBUTTONDOWN: case WM_XBUTTONDBLCLK: {
+            int b = (m == WM_LBUTTONDOWN || m == WM_LBUTTONDBLCLK) ? 0 : (m == WM_RBUTTONDOWN || m == WM_RBUTTONDBLCLK) ? 1
+                  : (m == WM_MBUTTONDOWN || m == WM_MBUTTONDBLCLK) ? 2 : (GET_XBUTTON_WPARAM(w) == XBUTTON1 ? 3 : 4);
+            bool dbl = m == WM_LBUTTONDBLCLK || m == WM_RBUTTONDBLCLK || m == WM_MBUTTONDBLCLK || m == WM_XBUTTONDBLCLK;
+            MouseDown(b, POINT{GET_X_LPARAM(l), GET_Y_LPARAM(l)}, w, dbl);
+            return (m == WM_XBUTTONDOWN || m == WM_XBUTTONDBLCLK) ? TRUE : 0;
         }
+        case WM_LBUTTONUP: case WM_RBUTTONUP: case WM_MBUTTONUP: case WM_XBUTTONUP: {
+            int b = m == WM_LBUTTONUP ? 0 : m == WM_RBUTTONUP ? 1 : m == WM_MBUTTONUP ? 2 : (GET_XBUTTON_WPARAM(w) == XBUTTON1 ? 3 : 4);
+            MouseUp(b, POINT{GET_X_LPARAM(l), GET_Y_LPARAM(l)}, w);
+            return m == WM_XBUTTONUP ? TRUE : 0;
+        }
+        case WM_CAPTURECHANGED:
+            if (HWND(l) != view_ && btnDown_) { btnDown_ = 0; btnUsed_ = 0; dragBtn_ = -1; dragging_ = false; selecting_ = false; }
+            return 0;
         case WM_MOUSEMOVE: {
             POINT p = {GET_X_LPARAM(l), GET_Y_LPARAM(l)};
             if (cursorHidden_ && (std::abs(p.x - lastPt_.x) > 2 || std::abs(p.y - lastPt_.y) > 2)) { ShowCursor(TRUE); cursorHidden_ = false; }
@@ -874,95 +954,51 @@ LRESULT Viewer::OnView(UINT m, WPARAM w, LPARAM l) {
                 lastPt_ = p;
                 return 0;
             }
-            if (lDown_) {
-                if (!dragging_ && (std::abs(p.x - downPt_.x) > g_set.dragMargin || std::abs(p.y - downPt_.y) > g_set.dragMargin)) dragging_ = true;
+            if (dragBtn_ >= 0) {
+                int act = g_set.dragAction[dragBtn_];
+                if (!dragging_ && (std::abs(p.x - downPt_.x) > g_set.dragMargin || std::abs(p.y - downPt_.y) > g_set.dragMargin) && act) {
+                    dragging_ = true;
+                    btnUsed_ |= 1u << dragBtn_;
+                }
                 if (dragging_) {
-                    SetCursor(LoadCursor(nullptr, IDC_SIZEALL));
-                    int k = std::max(1, g_set.dragScrollRate);
-                    ScrollBy((lastPt_.x - p.x) * k, (lastPt_.y - p.y) * k);
+                    if (act == DragScroll) {
+                        SetCursor(LoadCursor(nullptr, IDC_SIZEALL));
+                        int k = std::max(1, g_set.dragScrollRate);
+                        ScrollBy((lastPt_.x - p.x) * k, (lastPt_.y - p.y) * k);
+                    } else if (act == DragZoom) {
+                        bool vert = g_set.dragZoomDir >= 2;
+                        int d = vert ? p.y - downPt_.y : p.x - downPt_.x;
+                        if (g_set.dragZoomDir == 1 || g_set.dragZoomDir == 2) d = -d;   // right->left, bottom->top
+                        static const int perDouble[3] = {300, 150, 75};                 // slow / medium / fast
+                        double z = dragStartZoom_ * std::pow(2.0, d / double(Scale(perDouble[std::max(0, std::min(2, g_set.dragZoomSpeed))], dpi_)));
+                        POINT a = downPt_;
+                        SetZoom(z, &a);
+                    } else if (act == DragMoveWindow && !full_) {
+                        POINT sp = p; ClientToScreen(view_, &sp);
+                        SetWindowPos(hwnd_, nullptr, winStartRect_.left + sp.x - winStartScreen_.x, winStartRect_.top + sp.y - winStartScreen_.y,
+                                     0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                    }
                 }
-            } else if (x1Down_) {
-                bool vert = g_set.dragZoomDir >= 2;
-                int d = vert ? p.y - downPt_.y : p.x - downPt_.x;
-                if (g_set.dragZoomDir == 1 || g_set.dragZoomDir == 2) d = -d;   // right->left, bottom->top
-                if (!x1Zooming_ && std::abs(d) > g_set.dragMargin) x1Zooming_ = true;
-                if (x1Zooming_) {
-                    static const int perDouble[3] = {300, 150, 75};          // slow / medium / fast
-                    double z = x1StartZoom_ * std::pow(2.0, d / double(Scale(perDouble[std::max(0, std::min(2, g_set.dragZoomSpeed))], dpi_)));
-                    POINT a = downPt_;
-                    SetZoom(z, &a);
-                }
-            } else if (g_set.hoverScroll && img_.valid()) {
+            } else if (!btnDown_ && g_set.hoverScroll && img_.valid()) {
                 HoverScroll(p);
             }
             lastPt_ = p;
             return 0;
         }
-        case WM_LBUTTONUP: {
-            if (GetCapture() == view_) ReleaseCapture();
-            bool wasDrag = dragging_, wasDown = lDown_;
-            lDown_ = false; dragging_ = false;
-            if (selecting_) {
-                selecting_ = false;
-                if (sel_.w == 0 || sel_.h == 0) sel_ = Rect{};
-                Redraw(); UpdateStatus();
-                return 0;
-            }
-            if (suppressClick_) { suppressClick_ = false; return 0; }
-            if (wasDown && !wasDrag && !lWheelUsed_) DispatchChord({MouseMods(w), MLClick});
-            return 0;
-        }
-        case WM_LBUTTONDBLCLK:
-            if (!selMode_) DispatchChord({MouseMods(w), MLDbl});
-            return 0;
-        case WM_RBUTTONDOWN: rDown_ = true; rWheelUsed_ = false; return 0;
-        case WM_RBUTTONUP: {
-            bool used = rWheelUsed_;
-            rDown_ = false; rWheelUsed_ = false;
-            if (used) return 0;
-            Chord c{MouseMods(w), MRClick};
-            int cmd = g_keymap.Lookup(c);
-            if (cmd == CmdPopupMenu) { POINT p = {GET_X_LPARAM(l), GET_Y_LPARAM(l)}; ClientToScreen(view_, &p); ShowPopup(nullptr, p); }
-            else if (cmd) Execute(cmd);
-            return 0;
-        }
-        case WM_RBUTTONDBLCLK: DispatchChord({MouseMods(w), MRDbl}); return 0;
-        case WM_MBUTTONUP: DispatchChord({MouseMods(w), MMClick}); return 0;
-        case WM_MBUTTONDBLCLK: DispatchChord({MouseMods(w), MMDbl}); return 0;
-        case WM_XBUTTONDOWN:
-            if (GET_XBUTTON_WPARAM(w) == XBUTTON1) {
-                x1Down_ = true; x1Zooming_ = false; downPt_ = {GET_X_LPARAM(l), GET_Y_LPARAM(l)}; x1StartZoom_ = zoom_;
-                SetCapture(view_);
-            }
-            return TRUE;
-        case WM_XBUTTONUP:
-            if (GET_XBUTTON_WPARAM(w) == XBUTTON1) {
-                if (GetCapture() == view_) ReleaseCapture();
-                bool z = x1Zooming_;
-                x1Down_ = false; x1Zooming_ = false;
-                if (!z) DispatchChord({MouseMods(w), MX1Click});
-            } else DispatchChord({MouseMods(w), MX2Click});
-            return TRUE;
-        case WM_XBUTTONDBLCLK:
-            DispatchChord({MouseMods(w), GET_XBUTTON_WPARAM(w) == XBUTTON1 ? unsigned(MX1Dbl) : unsigned(MX2Dbl)});
-            return TRUE;
         case WM_MOUSEWHEEL: {
             int d = GET_WHEEL_DELTA_WPARAM(w);
             WORD keys = GET_KEYSTATE_WPARAM(w);
-            int step = Scale(g_set.wheelScroll * 3, dpi_);
-            if (keys & MK_LBUTTON) { lWheelUsed_ = true; dragging_ = true; ScrollBy(0, d > 0 ? -step : step); return 0; }
-            if (keys & MK_RBUTTON) { rWheelUsed_ = true; ScrollBy(d > 0 ? -step : step, 0); return 0; }
             wheelAcc_ += d;
             int notch = g_set.wheelDull ? WHEEL_DELTA * 2 : WHEEL_DELTA;
+            POINT p = {GET_X_LPARAM(l), GET_Y_LPARAM(l)}; ScreenToClient(view_, &p);
             while (std::abs(wheelAcc_) >= notch) {
                 bool up = wheelAcc_ > 0;
                 wheelAcc_ += up ? -notch : notch;
-                Chord c{MouseMods(keys), up ? unsigned(MWheelUp) : unsigned(MWheelDown)};
-                int cmd = g_keymap.Lookup(c);
-                if (cmd == CmdZoomIn || cmd == CmdZoomOut) {
-                    POINT p = {GET_X_LPARAM(l), GET_Y_LPARAM(l)}; ScreenToClient(view_, &p);
-                    ZoomStep(cmd == CmdZoomIn ? 1 : -1, &p);
-                } else if (cmd) Execute(cmd);
+                unsigned held = HeldMods();
+                int cmd = g_keymap.Lookup({MouseMods(keys) | held, up ? unsigned(MWheelUp) : unsigned(MWheelDown)});
+                if (!cmd) continue;
+                btnUsed_ |= btnDown_;            // buttons used as modifiers do not click on release
+                RunMouseCommand(cmd, p);
             }
             return 0;
         }
