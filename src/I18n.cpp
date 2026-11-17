@@ -38,17 +38,8 @@ static void Fill(std::map<std::string, std::wstring>& tab, const std::wstring& c
     for (auto& kv : ParseLangFile(ov)) tab[kv.first] = Utf8ToW(kv.second);
 }
 
-std::wstring DetectOsLanguage() {
-    LANGID id = GetUserDefaultUILanguage();
-    switch (PRIMARYLANGID(id)) {
-        case LANG_JAPANESE: return L"ja";
-        case LANG_THAI: return L"th";
-        default: return L"en";
-    }
-}
-
 void I18nLoad(const std::wstring& code) {
-    std::wstring c = (code == L"ja" || code == L"th" || code == L"en") ? code : DetectOsLanguage();
+    std::wstring c = (code == L"ja" || code == L"th" || code == L"en") ? code : std::wstring(L"en");   // first start is English
     g_lang = c;
     if (g_fallback.empty()) Fill(g_fallback, L"en");
     Fill(g_tab, c);
