@@ -1,0 +1,43 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows-msvc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lviewer-win64
+          path: build/Release/Lviewer.exe
+
+  linux-tests-and-mingw:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests
+        run: |
+          cmake -S . -B build-test -DLVIEWER_TESTS=ON
+          cmake --build build-test -j
+          cd build-test && ctest --output-on-failure
+      - name: Language files are up to date
+        run: |
+          python3 tools/gen_lang.py
+          git diff --exit-code res/lang
+      - name: Cross build (MinGW-w64)
+        run: |
+          sudo apt-get update && sudo apt-get install -y mingw-w64
+          cmake -S . -B build-mingw -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-mingw -j
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lviewer-win64-mingw
+          path: build-mingw/Lviewer.exe
