@@ -3,6 +3,7 @@
 #include "I18n.h"
 #include "Settings.h"
 #include "Form.h"
+#include "Updater.h"
 #include <imm.h>
 #include <cmath>
 
@@ -288,6 +289,7 @@ bool Viewer::Create(const StartupOptions& opt) {
         if (!p.empty()) OpenPath(p);
     }
     if (opt.slide) StartSlide(true);
+    StartBackgroundUpdateCheck();
     UpdateTitle();
     UpdateStatus();
     return true;
@@ -408,6 +410,11 @@ LRESULT Viewer::OnMain(UINT m, WPARAM w, LPARAM l) {
                 }
             }
             return 0;
+        case WM_APP + 10: {
+            std::unique_ptr<ReleaseInfo> r(reinterpret_cast<ReleaseInfo*>(l));
+            if (r && IsWindowEnabled(hwnd_)) OfferUpdate(*r);
+            return 0;
+        }
         case WM_DPICHANGED: {
             RECT* r = reinterpret_cast<RECT*>(l);
             SetWindowPos(hwnd_, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE);
@@ -634,15 +641,26 @@ void Viewer::ScrollTo(double fx, double fy) {
 
 void Viewer::HoverScroll(POINT p) {
     RECT r = ViewRect();
-    double m = std::max(0, std::min(49, g_set.hoverMargin)) / 100.0;
-    auto frac = [&](int v, int size) {
-        double a = size * m, b = size * (1 - m);
-        if (b <= a) return 0.5;
-        return std::max(0.0, std::min(1.0, (v - a) / (b - a)));
-    };
+    double m = std::max(0, std::min(50, g_set.hoverMargin)) / 100.0;
     int ox = sx_, oy = sy_;
-    sx_ = int((DispW() - r.right) * frac(p.x, r.right));
-    sy_ = int((DispH() - r.bottom) * frac(p.y, r.bottom));
+    if (g_set.hoverMinMove > 0) {
+        // relative mode: follow mouse movement, at least hoverMinMove image pixels per mouse pixel
+        auto rate = [&](int range, int size) {
+            double span = size * (1 - 2 * m);
+            double k = span > 1 ? double(range) / span : double(range);
+            return std::max(k, double(g_set.hoverMinMove));
+        };
+        sx_ += int(std::lround((p.x - lastPt_.x) * rate(DispW() - r.right, r.right)));
+        sy_ += int(std::lround((p.y - lastPt_.y) * rate(DispH() - r.bottom, r.bottom)));
+    } else {
+        auto frac = [&](int v, int size) {
+            double a = size * m, b = size * (1 - m);
+            if (b <= a) return v < size / 2 ? 0.0 : 1.0;
+            return std::max(0.0, std::min(1.0, (v - a) / (b - a)));
+        };
+        sx_ = int((DispW() - r.right) * frac(p.x, r.right));
+        sy_ = int((DispH() - r.bottom) * frac(p.y, r.bottom));
+    }
     ClampScroll();
     if (ox != sx_ || oy != sy_) { UpdateScrollBars(); Redraw(); }
 }
@@ -860,12 +878,17 @@ LRESULT Viewer::OnView(UINT m, WPARAM w, LPARAM l) {
                 if (!dragging_ && (std::abs(p.x - downPt_.x) > g_set.dragMargin || std::abs(p.y - downPt_.y) > g_set.dragMargin)) dragging_ = true;
                 if (dragging_) {
                     SetCursor(LoadCursor(nullptr, IDC_SIZEALL));
-                    ScrollBy(lastPt_.x - p.x, lastPt_.y - p.y);
+                    int k = std::max(1, g_set.dragScrollRate);
+                    ScrollBy((lastPt_.x - p.x) * k, (lastPt_.y - p.y) * k);
                 }
             } else if (x1Down_) {
-                if (!x1Zooming_ && std::abs(p.x - downPt_.x) > g_set.dragMargin) x1Zooming_ = true;
+                bool vert = g_set.dragZoomDir >= 2;
+                int d = vert ? p.y - downPt_.y : p.x - downPt_.x;
+                if (g_set.dragZoomDir == 1 || g_set.dragZoomDir == 2) d = -d;   // right->left, bottom->top
+                if (!x1Zooming_ && std::abs(d) > g_set.dragMargin) x1Zooming_ = true;
                 if (x1Zooming_) {
-                    double z = x1StartZoom_ * std::pow(2.0, (p.x - downPt_.x) / double(Scale(150, dpi_)));
+                    static const int perDouble[3] = {300, 150, 75};          // slow / medium / fast
+                    double z = x1StartZoom_ * std::pow(2.0, d / double(Scale(perDouble[std::max(0, std::min(2, g_set.dragZoomSpeed))], dpi_)));
                     POINT a = downPt_;
                     SetZoom(z, &a);
                 }

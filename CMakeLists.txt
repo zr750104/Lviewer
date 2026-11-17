@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Lviewer VERSION 1.0.0 LANGUAGES C CXX)
+project(Lviewer VERSION 1.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,7 +15,7 @@ if(WIN32)
       _WIN32_WINNT=0x0A00 WINVER=0x0A00 MINIZ_NO_ZLIB_COMPATIBLE_NAMES
       LV_VERSION_STR=L"${PROJECT_VERSION}")
   target_link_libraries(Lviewer PRIVATE windowscodecs ole32 oleaut32 uuid comctl32 comdlg32
-      shell32 shlwapi gdi32 user32 advapi32 winspool propsys imm32)
+      shell32 shlwapi gdi32 user32 advapi32 winspool propsys imm32 winhttp)
   if(MSVC)
     target_compile_options(Lviewer PRIVATE /utf-8 /W3 /O2 /MP)
     set_property(TARGET Lviewer PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")

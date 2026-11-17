@@ -261,7 +261,7 @@ const MenuNode& MenuTree() {
             Sep(),
             Sub("menu.lang", {C(CmdLangJa), C(CmdLangEn), C(CmdLangTh)})}),
         Sub("menu.other", {
-            C(CmdPreferences), C(CmdKeySettings), C(CmdMouseSettings), C(CmdFormats), C(CmdAssociate), Sep(),
+            C(CmdPreferences), C(CmdKeySettings), C(CmdMouseSettings), C(CmdFormats), C(CmdAssociate), C(CmdCheckUpdate), Sep(),
             Sub("menu.wall", {C(CmdWallCenter), C(CmdWallTile), C(CmdWallStretch), Sep(), C(CmdWallFitW), C(CmdWallFitH), Sep(), C(CmdWallDelete)}),
             Sep(), C(CmdHelp), Sep(), C(CmdAbout)}),
     });
