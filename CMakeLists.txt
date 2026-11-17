@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Lviewer VERSION 1.1.0 LANGUAGES C CXX)
+project(Lviewer VERSION 1.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,6 +11,9 @@ if(WIN32)
   file(GLOB LV_SRC CONFIGURE_DEPENDS src/*.cpp src/core/*.cpp)
   add_executable(Lviewer WIN32 ${LV_SRC} third_party/miniz/miniz.c res/Lviewer.rc)
   target_include_directories(Lviewer PRIVATE src third_party/miniz res)
+  # rebuild the resource script when embedded files change
+  set_source_files_properties(res/Lviewer.rc PROPERTIES OBJECT_DEPENDS
+      "${CMAKE_SOURCE_DIR}/res/lang/ja.ini;${CMAKE_SOURCE_DIR}/res/lang/en.ini;${CMAKE_SOURCE_DIR}/res/lang/th.ini;${CMAKE_SOURCE_DIR}/res/Lviewer.ico;${CMAKE_SOURCE_DIR}/res/Lviewer.manifest")
   target_compile_definitions(Lviewer PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX
       _WIN32_WINNT=0x0A00 WINVER=0x0A00 MINIZ_NO_ZLIB_COMPATIBLE_NAMES
       LV_VERSION_STR=L"${PROJECT_VERSION}")

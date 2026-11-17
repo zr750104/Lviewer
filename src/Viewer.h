@@ -111,7 +111,7 @@ private:
     // dialogs (Dialogs.cpp)
     void DlgResize(); void DlgCanvas(); void DlgRotAngle(); void DlgLevels(); void DlgBrightness(); void DlgHueSat();
     void DlgUnsharp(); void DlgGaussian(); void DlgColorDepth(); void DlgMaskOptions(); void DlgSelect(); void DlgSelUnit();
-    void DlgZoom(); void DlgJump(); void DlgSlide(); void DlgPreferences(); void DlgMouse(); void DlgApps();
+    void DlgZoom(); void DlgJump(); void DlgSlide(); void DlgPreferences(); void DlgMouse(); bool DlgMouseOptions(); void DlgApps();
     void DlgAssociate(); void DlgKeys();
     template <class F> void PreviewFilter(class Form& f, F apply);
 
@@ -156,11 +156,18 @@ private:
     bool selMode_ = false; Rect sel_; bool selecting_ = false; double selAx_ = 0, selAy_ = 0;
 
     // mouse state
-    bool lDown_ = false, rDown_ = false, dragging_ = false, x1Down_ = false, x1Zooming_ = false;
-    bool rWheelUsed_ = false, lWheelUsed_ = false, suppressClick_ = false;
-    POINT downPt_ = {}, lastPt_ = {};
+    enum { DragNone = 0, DragScroll = 1, DragZoom = 2, DragMoveWindow = 3 };
+    unsigned btnDown_ = 0, btnUsed_ = 0;     // bit per button L,R,M,X1,X2
+    int dragBtn_ = -1;
+    bool dragging_ = false, suppressClick_ = false;
+    POINT downPt_ = {}, lastPt_ = {}, winStartScreen_ = {};
+    RECT winStartRect_ = {};
     int wheelAcc_ = 0, hwheelAcc_ = 0;
-    double x1StartZoom_ = 1;
+    double dragStartZoom_ = 1;
+    unsigned HeldMods() const;
+    void RunMouseCommand(int cmd, POINT clientPt);
+    void MouseDown(int b, POINT p, WPARAM w, bool dbl);
+    void MouseUp(int b, POINT p, WPARAM w);
 
     // fullscreen
     bool full_ = false;

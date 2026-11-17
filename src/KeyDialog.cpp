@@ -46,7 +46,7 @@ struct Modal {
         RECT orc; GetWindowRect(own, &orc);
         int W = Scale(w, dpi), H = Scale(h, dpi);
         CreateWindowExW(WS_EX_DLGMODALFRAME | WS_EX_CONTROLPARENT, L"LviewerModal", title.c_str(),
-                        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_CLIPCHILDREN,
+                        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME,
                         (orc.left + orc.right - W) / 2, (orc.top + orc.bottom - H) / 2, W, H, own, nullptr, GetModuleHandleW(nullptr), this);
         return hwnd != nullptr;
     }
@@ -231,6 +231,168 @@ void Viewer::DlgKeys() {
     });
     if (!ok) { g_set.keys = backup; g_keymap.Build(); }
     else g_set.Save();
+    RebuildUi();
+}
+
+// ======================================================== mouse customize
+void Viewer::DlgMouse() {
+    struct Op { unsigned code; const char* label; int own; };   // own: row that means "alone"
+    static const Op ops[] = {
+        {MLClick, "mouse.LClick", 0}, {MLDbl, "mouse.LDbl", 0}, {MRClick, "mouse.RClick", 1}, {MRDbl, "mouse.RDbl", 1},
+        {MMClick, "mouse.MClick", 2}, {MMDbl, "mouse.MDbl", 2}, {MX1Click, "mouse.X1Click", 3}, {MX1Dbl, "mouse.X1Dbl", 3},
+        {MX2Click, "mouse.X2Click", 4}, {MX2Dbl, "mouse.X2Dbl", 4}, {MWheelUp, "mouse.WheelUp", 2}, {MWheelDown, "mouse.WheelDown", 2},
+        {0, "mouse.drag", -1},
+    };
+    const int nOps = int(sizeof(ops) / sizeof(ops[0]));
+    static const char* holdBtn[5] = {"mouse.btn.L", "mouse.btn.R", "mouse.btn.M", "mouse.btn.X1", "mouse.btn.X2"};
+    static const char* dragNames[4] = {"misc.none", "mouse.drag.scroll", "mouse.drag.zoom", "mouse.drag.move"};
+    auto keysBackup = g_set.keys;
+    int dragBackup[5];
+    std::copy(g_set.dragAction, g_set.dragAction + 5, dragBackup);
+
+    Modal d;
+    if (!d.Create(hwnd_, StripMnemonic(T("cmd.mousesettings")), 600, 470)) return;
+    enum { IdList = 100, IdRow0 = 110, IdVal0 = 120, IdOptions = 130, IdDefaults, IdOK, IdCancel, IdLabel, IdGroup, IdNote };
+    HWND group = d.Ctl(L"BUTTON", T("mouse.customize"), BS_GROUPBOX, 0, IdGroup);
+    HWND lbl = d.Ctl(L"STATIC", T("mouse.operation"), SS_LEFT | SS_NOPREFIX, 0, IdLabel);
+    HWND list = d.Ctl(L"LISTBOX", L"", WS_TABSTOP | WS_VSCROLL | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT, WS_EX_CLIENTEDGE, IdList);
+    HWND rowBtn[5], rowVal[5];
+    for (int r = 0; r < 5; ++r) {
+        rowBtn[r] = d.Ctl(L"BUTTON", L"", WS_TABSTOP | BS_PUSHBUTTON, 0, IdRow0 + r);
+        rowVal[r] = d.Ctl(L"EDIT", L"", ES_READONLY | ES_AUTOHSCROLL, WS_EX_CLIENTEDGE, IdVal0 + r);
+    }
+    HWND note = d.Ctl(L"STATIC", T("mouse.customnote"), SS_LEFT | SS_NOPREFIX, 0, IdNote);
+    HWND opt = d.Ctl(L"BUTTON", T("mouse.optionsbtn"), WS_TABSTOP | BS_PUSHBUTTON, 0, IdOptions);
+    HWND def = d.Ctl(L"BUTTON", T("btn.defaults"), WS_TABSTOP | BS_PUSHBUTTON, 0, IdDefaults);
+    HWND okb = d.Ctl(L"BUTTON", T("btn.ok"), WS_TABSTOP | BS_DEFPUSHBUTTON, 0, IdOK);
+    HWND cnb = d.Ctl(L"BUTTON", T("btn.cancel"), WS_TABSTOP | BS_PUSHBUTTON, 0, IdCancel);
+    for (int i = 0; i < nOps; ++i) SendMessageW(list, LB_ADDSTRING, 0, LPARAM(T(ops[i].label).c_str()));
+    SendMessageW(list, LB_SETCURSEL, 0, 0);
+
+    auto curOp = [&] { int i = int(SendMessageW(list, LB_GETCURSEL, 0, 0)); return i < 0 ? 0 : i; };
+    auto chordFor = [&](int op, int r) { return Chord{r == ops[op].own ? 0u : HoldBit(r), ops[op].code}; };
+    auto refresh = [&] {
+        int op = curOp();
+        bool drag = ops[op].code == 0;
+        for (int r = 0; r < 5; ++r) {
+            std::wstring b = (!drag && r == ops[op].own) ? T("mouse.alone") : T(holdBtn[r]);
+            SetWindowTextW(rowBtn[r], b.c_str());
+            std::wstring v;
+            if (drag) v = T(dragNames[g_set.dragAction[r]]);
+            else {
+                int cmd = g_keymap.Lookup(chordFor(op, r));
+                v = cmd ? CommandLabel(cmd) : T("misc.none");
+            }
+            SetWindowTextW(rowVal[r], v.c_str());
+        }
+    };
+    auto pickCommand = [&](HWND anchor) -> int {   // returns command id, 0 = none, -1 = cancelled
+        auto savedDyn = dynMenus_;
+        HMENU root = BuildMenu(MenuTree(), true);
+        InsertMenuW(root, 0, MF_BYPOSITION | MF_STRING, 1, T("misc.none").c_str());
+        InsertMenuW(root, 1, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
+        HMENU hidden = CreatePopupMenu();
+        for (int c : {int(CmdDeleteDirect), int(CmdRandomJump), int(CmdSlideToggle), int(CmdToggleOrigFit), int(CmdPopupMenu),
+                      int(CmdPopupApps), int(CmdPopupMask), int(CmdPopupSwap), int(CmdPopupDisp), int(CmdPopupWall),
+                      int(CmdDirPrev), int(CmdDirNext), int(CmdScrollUpS), int(CmdScrollDownS), int(CmdScrollLeftS), int(CmdScrollRightS),
+                      int(CmdScrollUpL), int(CmdScrollDownL), int(CmdScrollLeftL), int(CmdScrollRightL)})
+            AppendMenuW(hidden, MF_STRING, UINT_PTR(c), CommandLabel(c).c_str());
+        AppendMenuW(root, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(root, MF_POPUP, UINT_PTR(hidden), T("help.hidden").c_str());
+        RECT rc; GetWindowRect(anchor, &rc);
+        int r = TrackPopupMenuEx(root, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN, rc.left, rc.bottom, d.hwnd, nullptr);
+        DestroyMenu(root);
+        dynMenus_ = savedDyn;
+        if (r == 1) return 0;
+        if (r > CmdFirst && r < CmdLast) return r;
+        return -1;
+    };
+    auto layout = [&] {
+        RECT rc; GetClientRect(d.hwnd, &rc);
+        int p = Scale(10, d.dpi), bh = Scale(26, d.dpi), bw = Scale(130, d.dpi), W = rc.right, H = rc.bottom;
+        int gTop = p, gBottom = H - p * 3 - bh * 3;
+        MoveWindow(group, p, gTop, W - 2 * p, gBottom - gTop, TRUE);
+        int lx = p * 2, lw = Scale(170, d.dpi), ty = gTop + Scale(22, d.dpi);
+        MoveWindow(lbl, lx, ty, lw, Scale(18, d.dpi), TRUE);
+        MoveWindow(list, lx, ty + Scale(20, d.dpi), lw, gBottom - ty - Scale(20, d.dpi) - p, TRUE);
+        int rx = lx + lw + p * 2, rw = W - rx - p * 2;
+        int rowH = (gBottom - ty - p) / 5;
+        for (int r = 0; r < 5; ++r) {
+            int y = ty + r * rowH;
+            MoveWindow(rowBtn[r], rx, y, std::min(rw, Scale(240, d.dpi)), bh, TRUE);
+            MoveWindow(rowVal[r], rx, y + bh + Scale(3, d.dpi), rw, bh - Scale(4, d.dpi), TRUE);
+        }
+        MoveWindow(note, p, gBottom + Scale(4, d.dpi), W - 2 * p, bh * 2, TRUE);
+        int by = H - p - bh;
+        MoveWindow(opt, p, by, bw, bh, TRUE);
+        MoveWindow(def, p * 2 + bw, by, bw, bh, TRUE);
+        MoveWindow(okb, W - p * 2 - bw * 2 + Scale(30, d.dpi), by, bw - Scale(15, d.dpi), bh, TRUE);
+        MoveWindow(cnb, W - p - bw + Scale(15, d.dpi), by, bw - Scale(15, d.dpi), bh, TRUE);
+    };
+    d.handler = [&](UINT m, WPARAM w, LPARAM, bool& handled) -> LRESULT {
+        if (m == WM_SIZE) { layout(); handled = true; return 0; }
+        if (m != WM_COMMAND) return 0;
+        int id = LOWORD(w), code = HIWORD(w);
+        handled = true;
+        if (id == IdList && code == LBN_SELCHANGE) { refresh(); return 0; }
+        if (id >= IdRow0 && id < IdRow0 + 5 && code == BN_CLICKED) {
+            int r = id - IdRow0, op = curOp();
+            if (ops[op].code == 0) {   // drag action
+                HMENU mnu = CreatePopupMenu();
+                for (int a = 0; a < 4; ++a)
+                    AppendMenuW(mnu, MF_STRING | (g_set.dragAction[r] == a ? MF_CHECKED : 0), UINT_PTR(a + 1), T(dragNames[a]).c_str());
+                RECT rc; GetWindowRect(rowBtn[r], &rc);
+                int sel = TrackPopupMenuEx(mnu, TPM_RETURNCMD, rc.left, rc.bottom, d.hwnd, nullptr);
+                DestroyMenu(mnu);
+                if (sel > 0) {
+                    int a = sel - 1;
+                    if (a) for (int k = 0; k < 5; ++k) if (k != r && g_set.dragAction[k] == a) g_set.dragAction[k] = 0;   // unique
+                    g_set.dragAction[r] = a;
+                }
+            } else {
+                int cmd = pickCommand(rowBtn[r]);
+                if (cmd >= 0) g_keymap.Bind(chordFor(op, r), cmd);
+            }
+            refresh();
+            return 0;
+        }
+        if (id == IdOptions) { DlgMouseOptions(); return 0; }
+        if (id == IdDefaults) {
+            if (MessageBoxW(d.hwnd, T("mouse.defaultsq").c_str(), L"Lviewer", MB_YESNO | MB_ICONQUESTION) != IDYES) return 0;
+            for (int op = 0; op < nOps; ++op) {
+                if (!ops[op].code) continue;
+                for (int r = 0; r < 5; ++r) {
+                    Chord c = chordFor(op, r);
+                    int defCmd = 0;
+                    for (auto& ci : AllCommands())
+                        for (auto& part : Split(Utf8ToW(ci.defKeys), L',')) { Chord x; if (ParseChord(part, x) && x == c) defCmd = ci.id; }
+                    g_keymap.Bind(c, defCmd);
+                }
+            }
+            Settings defs;
+            std::copy(defs.dragAction, defs.dragAction + 5, g_set.dragAction);
+            refresh();
+            return 0;
+        }
+        if (id == IdOK) { d.ok = true; d.done = true; return 0; }
+        if (id == IdCancel) { d.done = true; return 0; }
+        handled = false;
+        return 0;
+    };
+    layout();
+    refresh();
+    SetFocus(list);
+    bool ok = d.Run([&](MSG& msg) {
+        if (msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE) { d.done = true; return true; }
+        return false;
+    });
+    if (!ok) {
+        g_set.keys = keysBackup;
+        std::copy(dragBackup, dragBackup + 5, g_set.dragAction);
+        g_keymap.Build();
+    } else {
+        g_set.Save();
+    }
     RebuildUi();
 }
 
