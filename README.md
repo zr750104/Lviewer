@@ -1,7 +1,7 @@
 # Lviewer
 
 TIFF を**プラグインなし**で開ける、軽快な単画面型の画像ビューワ（Windows 10/11, 64bit）。
-MassiGra 0.44 の操作体系（既定キー・メニュー構成・表示オプション）を手本に新規実装しています。解析内容と機能対応表は [docs/spec.md](docs/spec.md)。
+従来型の単画面ビューワの操作体系（既定キー・メニュー構成・表示オプション）を踏襲して新規実装しています。解析内容と機能対応表は [docs/spec.md](docs/spec.md)。
 
 - **TIFF を標準対応**：マルチページ、LZW / ZIP / PackBits / JPEG / CCITT G3・G4、16bit、透明。Windows 標準の WIC を使うので追加 DLL 不要
 - JPEG・PNG・GIF（アニメ）・BMP・ICO・JPEG XR、コーデックがあれば WebP・HEIF・RAW も

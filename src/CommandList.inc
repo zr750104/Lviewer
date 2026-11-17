@@ -1,5 +1,5 @@
 // X(identifier, "name", "default keys / mouse")  — name is used for INI [Keys] and lang key "cmd.<name>"
-// Default keys follow MassiGra 0.44's built-in key table so muscle memory carries over.
+// Default keys follow a classic single-window viewer's key table so muscle memory carries over.
 // ---- File
 X(Open,            "open",            "O")
 X(Reload,          "reload",          "Shift+R")
