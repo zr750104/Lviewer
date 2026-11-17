@@ -8,6 +8,8 @@
 
 namespace lv {
 
+struct ReleaseInfo;
+
 struct StartupOptions {
     std::wstring path;
     bool slide = false, getclip = false, blank = false, newwnd = false;
@@ -102,6 +104,9 @@ private:
     void DoInfo();
     void DoWallpaper(int style); void DoWallDelete();
     void DoHelp(); void DoAbout(); void DoFormats();
+    void DoCheckUpdate(bool manual);
+    void StartBackgroundUpdateCheck();
+    void OfferUpdate(const ReleaseInfo& r);
     void SetLanguage(const std::wstring& code);
     // dialogs (Dialogs.cpp)
     void DlgResize(); void DlgCanvas(); void DlgRotAngle(); void DlgLevels(); void DlgBrightness(); void DlgHueSat();

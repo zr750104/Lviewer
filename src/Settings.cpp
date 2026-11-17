@@ -38,6 +38,9 @@ const Field kFields[] = {
     F(L"Slide", L"Random", Bool, slideRandom), F(L"Slide", L"FullScreen", Bool, slideFull),
     F(L"Slide", L"NextFolder", Bool, slideNextDir),
     F(L"Mouse", L"WheelScroll", Int, wheelScroll), F(L"Mouse", L"DragMargin", Int, dragMargin),
+    F(L"Mouse", L"DragScrollRate", Int, dragScrollRate), F(L"Mouse", L"DragZoomSpeed", Int, dragZoomSpeed),
+    F(L"Mouse", L"DragZoomDir", Int, dragZoomDir), F(L"Mouse", L"HoverMinMove", Int, hoverMinMove),
+    F(L"Update", L"CheckAtStart", Bool, updateCheckAtStart), F(L"Update", L"LastCheckDay", Int, lastUpdateCheckDay),
     F(L"Mouse", L"WheelDull", Bool, wheelDull), F(L"Mouse", L"ActivateNoClick", Bool, activateNoClick),
     F(L"File", L"ConfirmDelete", Bool, confirmDelete), F(L"File", L"ConfirmOverwrite", Bool, confirmOverwrite),
     F(L"File", L"MoveNextAfterDelete", Bool, moveNextAfterDelete),
@@ -144,6 +147,11 @@ void Settings::Load(const std::wstring& path) {
     undoMax = std::max(0, std::min(50, undoMax));
     slideMs = std::max(100, slideMs);
     jpegQuality = std::max(1, std::min(100, jpegQuality));
+    dragScrollRate = std::max(1, std::min(10, dragScrollRate));
+    dragZoomSpeed = std::max(0, std::min(2, dragZoomSpeed));
+    dragZoomDir = std::max(0, std::min(3, dragZoomDir));
+    hoverMargin = std::max(0, std::min(50, hoverMargin));
+    hoverMinMove = std::max(0, std::min(10, hoverMinMove));
 }
 
 void Settings::Save() const {

@@ -4,6 +4,7 @@
 #include "Settings.h"
 #include "Form.h"
 #include <commdlg.h>
+#include "Updater.h"
 #include <cmath>
 
 namespace lv {
@@ -362,6 +363,7 @@ void Viewer::Execute(int cmd) {
         case CmdMouseSettings: DlgMouse(); return;
         case CmdFormats: DoFormats(); return;
         case CmdAssociate: DlgAssociate(); return;
+        case CmdCheckUpdate: DoCheckUpdate(true); return;
         case CmdWallCenter: DoWallpaper(WallCenter); return;
         case CmdWallTile: DoWallpaper(WallTile); return;
         case CmdWallStretch: DoWallpaper(WallStretch); return;
@@ -872,6 +874,87 @@ void Viewer::DoFormats() {
     Form f(T("cmd.formats"));
     f.Text(L"", t, 20, 70);
     f.Show(hwnd_);
+}
+
+// ================================================================ updates
+namespace {
+const UINT WM_LV_UPDATE = WM_APP + 10;
+struct UpdateThreadArgs { HWND hwnd; };
+DWORD WINAPI UpdateThread(LPVOID p) {
+    std::unique_ptr<UpdateThreadArgs> a(static_cast<UpdateThreadArgs*>(p));
+    auto* r = new ReleaseInfo();
+    std::wstring err;
+    if (FetchLatestRelease(*r, &err) && CompareVersions(r->tag, LV_VERSION_STR) > 0 && IsWindow(a->hwnd)) {
+        if (PostMessageW(a->hwnd, WM_LV_UPDATE, 0, LPARAM(r))) return 0;
+    }
+    delete r;
+    return 0;
+}
+} // namespace
+
+void Viewer::StartBackgroundUpdateCheck() {
+    if (!g_set.updateCheckAtStart) return;
+    int today = TodayNumber();
+    if (g_set.lastUpdateCheckDay == today) return;          // at most once a day
+    g_set.lastUpdateCheckDay = today;
+    HANDLE h = CreateThread(nullptr, 0, UpdateThread, new UpdateThreadArgs{hwnd_}, 0, nullptr);
+    if (h) CloseHandle(h);
+}
+
+void Viewer::DoCheckUpdate(bool manual) {
+    (void)manual;
+    HCURSOR oc = SetCursor(LoadCursor(nullptr, IDC_WAIT));
+    ReleaseInfo r; std::wstring err;
+    bool ok = FetchLatestRelease(r, &err);
+    SetCursor(oc);
+    g_set.lastUpdateCheckDay = TodayNumber();
+    if (!ok) { ShowError(T("update.checkfailed") + L"\n" + err); return; }
+    if (CompareVersions(r.tag, LV_VERSION_STR) <= 0) {
+        MsgBox(hwnd_, Fmt(T("update.latest").c_str(), LV_VERSION_STR), MB_ICONINFORMATION);
+        return;
+    }
+    OfferUpdate(r);
+}
+
+void Viewer::OfferUpdate(const ReleaseInfo& r) {
+    std::wstring notes = r.notes.size() > 800 ? r.notes.substr(0, 800) + L"..." : r.notes;
+    std::wstring q = Fmt(T("update.available").c_str(), r.tag.c_str(), LV_VERSION_STR) + L"\n\n" + notes + L"\n\n" + T("update.question");
+    int ans = MsgBox(hwnd_, q, MB_YESNOCANCEL | MB_ICONQUESTION);
+    if (ans == IDNO) { ShellExecuteW(hwnd_, nullptr, r.pageUrl.c_str(), nullptr, nullptr, SW_SHOWNORMAL); return; }
+    if (ans != IDYES) return;
+    if (!ConfirmDiscard()) return;
+    wchar_t tmp[MAX_PATH]; GetTempPathW(MAX_PATH, tmp);
+    std::wstring dir = PathJoin(tmp, L"Lviewer-update");
+    CreateDirectoryW(dir.c_str(), nullptr);
+    std::wstring zip = PathJoin(dir, L"update.zip");
+    std::wstring err;
+    HCURSOR oc = SetCursor(LoadCursor(nullptr, IDC_WAIT));
+    bool ok = DownloadToFile(r.zipUrl, zip, &err);
+    if (ok) {
+        StopAnimation(); ReleaseSource();
+        ok = InstallUpdate(zip, &err);
+    }
+    SetCursor(oc);
+    DeleteFileW(zip.c_str());
+    if (!ok) {
+        if (MsgBox(hwnd_, T("update.failed") + L"\n" + err + L"\n\n" + T("update.openpage"), MB_YESNO | MB_ICONWARNING) == IDYES)
+            ShellExecuteW(hwnd_, nullptr, r.pageUrl.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        if (list_.Current() && untitled_.empty()) LoadCurrent(page_);
+        return;
+    }
+    MsgBox(hwnd_, Fmt(T("update.done").c_str(), r.tag.c_str()), MB_ICONINFORMATION);
+    // restart with the current file
+    std::wstring cmd = L"\"" + ExePath() + L"\" /newwnd";
+    if (!opt_.user.empty()) cmd += L" /user=\"" + opt_.user + L"\"";
+    if (list_.Current()) cmd += L" \"" + list_.CurrentDisplayPath() + L"\"";
+    g_set.Save();
+    STARTUPINFOW si = {sizeof(si)};
+    PROCESS_INFORMATION pi = {};
+    if (CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+        CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+        modified_ = false;
+        PostMessageW(hwnd_, WM_CLOSE, 0, 0);
+    }
 }
 
 } // namespace lv

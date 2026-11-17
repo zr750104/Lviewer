@@ -5,6 +5,7 @@
 #include "I18n.h"
 #include "Commands.h"
 #include "core/Filters.h"
+#include "Updater.h"
 
 using namespace lv;
 
@@ -81,6 +82,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
     InitCommonControlsEx(&icc);
     SetParallelFor(ParallelForImpl);
 
+    CleanupAfterUpdate();
     StartupOptions opt = ParseArgs();
     g_set.Load(ResolveIniPath(opt.user, opt.userGiven));
     I18nLoad(g_set.lang);

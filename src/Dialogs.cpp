@@ -213,6 +213,7 @@ void Viewer::DlgPreferences() {
     f.Check(T("pref.confirmoverwrite"), &g_set.confirmOverwrite);
     f.Check(T("pref.nextafterdelete"), &g_set.moveNextAfterDelete);
     f.Check(T("pref.keeptime"), &g_set.keepTimestamp);
+    f.Check(T("pref.updatecheck"), &g_set.updateCheckAtStart);
     f.Page(T("pref.view"));
     f.Combo(T("pref.dispopt"), &g_set.dispOpt, disp);
     f.Combo(T("pref.dispoptfull"), &g_set.dispOptFull, disp);
@@ -223,7 +224,7 @@ void Viewer::DlgPreferences() {
     f.Check(T("pref.exifrotate"), &g_set.exifRotate);
     f.Check(T("pref.centerwnd"), &g_set.centerWindow);
     f.Check(T("pref.fittoolbar"), &g_set.fitWindowToToolbar);
-    f.Int(T("pref.hovermargin"), &g_set.hoverMargin, 0, 49, L"%");
+    f.Int(T("pref.hovermargin"), &g_set.hoverMargin, 0, 50, L"%");
     f.Page(T("pref.background"));
     f.Color(T("pref.bg1"), &g_set.bgColor1);
     f.Color(T("pref.bg2"), &g_set.bgColor2);
@@ -283,10 +284,20 @@ void Viewer::DlgMouse() {
     for (int i = 0; i < ni; ++i) f.Combo(T(ins[i].label), &sel[i], names);
     f.Page(T("mouse.page.options"));
     f.Int(T("mouse.wheelscroll"), &g_set.wheelScroll, 1, 1000, L"px");
-    f.Int(T("mouse.dragmargin"), &g_set.dragMargin, 0, 100, L"px");
-    f.Check(T("mouse.wheeldull"), &g_set.wheelDull);
+    f.Int(T("mouse.dragscroll"), &g_set.dragScrollRate, 1, 10, L"x");
+    f.Combo(T("mouse.dragzoomspeed"), &g_set.dragZoomSpeed, {T("mouse.speed.slow"), T("mouse.speed.medium"), T("mouse.speed.fast")});
+    f.Combo(T("mouse.dragzoomdir"), &g_set.dragZoomDir, {T("mouse.dir.ltor"), T("mouse.dir.rtol"), T("mouse.dir.btot"), T("mouse.dir.ttob")});
+    f.Int(T("mouse.dragmargin"), &g_set.dragMargin, 0, 100, T("mouse.dragmarginunit"));
+    f.Int(T("pref.hovermargin"), &g_set.hoverMargin, 0, 50, L"% (0 - 50)");
+    f.Int(T("mouse.hoverminmove"), &g_set.hoverMinMove, 0, 10, L"px");
     f.Check(T("mouse.activatenoclick"), &g_set.activateNoClick);
-    f.Int(T("pref.hovermargin"), &g_set.hoverMargin, 0, 49, L"%");
+    f.Check(T("mouse.wheeldull"), &g_set.wheelDull);
+    f.Button(T("btn.defaults"), [] {
+        Settings d;
+        g_set.wheelScroll = d.wheelScroll; g_set.dragScrollRate = d.dragScrollRate; g_set.dragZoomSpeed = d.dragZoomSpeed;
+        g_set.dragZoomDir = d.dragZoomDir; g_set.dragMargin = d.dragMargin; g_set.hoverMargin = d.hoverMargin;
+        g_set.hoverMinMove = d.hoverMinMove; g_set.activateNoClick = d.activateNoClick; g_set.wheelDull = d.wheelDull;
+    });
     f.Label(T("mouse.note"));
     if (!f.Show(hwnd_)) return;
     for (int i = 0; i < ni; ++i)

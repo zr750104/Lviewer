@@ -54,6 +54,13 @@ struct Settings {
     int slideMs = 5000; bool slideLoop = true, slideRandom = false, slideFull = false, slideNextDir = false;
     // mouse
     int wheelScroll = 40, dragMargin = 4;
+    int dragScrollRate = 1;           // multiplier for drag scrolling
+    int dragZoomSpeed = 1;            // 0 slow, 1 medium, 2 fast
+    int dragZoomDir = 0;              // 0 left->right, 1 right->left, 2 bottom->top, 3 top->bottom (direction that zooms in)
+    int hoverMinMove = 0;             // minimum image pixels per mouse pixel in hover scroll (0 = absolute mapping)
+    // updates
+    bool updateCheckAtStart = true;
+    int lastUpdateCheckDay = 0;
     bool wheelDull = false, activateNoClick = false;
     // file ops
     bool confirmDelete = true, confirmOverwrite = true, moveNextAfterDelete = true;
