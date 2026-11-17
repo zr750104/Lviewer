@@ -9,8 +9,28 @@ on:
         description: "Create a GitHub Release with this tag (e.g. v1.0.0). Leave empty for a normal build."
         required: false
         default: ""
+      delete_tags:
+        description: "Delete these releases and their tags (space separated, e.g. v1.0.0 v1.0.1). Leave empty normally."
+        required: false
+        default: ""
 
 jobs:
+  delete-releases:
+    if: github.event_name == 'workflow_dispatch' && inputs.delete_tags != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete releases and tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAGS: ${{ inputs.delete_tags }}
+        run: |
+          for t in $TAGS; do
+            echo "Deleting $t"
+            gh release delete "$t" --yes --cleanup-tag -R "${{ github.repository }}"
+          done
+
   windows-msvc:
     runs-on: windows-latest
     permissions:

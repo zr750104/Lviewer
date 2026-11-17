@@ -9,7 +9,7 @@ enum class Ty { Int, Bool, Str, Color };
 struct Field { const wchar_t* sec; const wchar_t* key; Ty ty; size_t off; };
 #define F(sec, key, ty, member) {sec, key, Ty::ty, offsetof(Settings, member)}
 const Field kFields[] = {
-    F(L"General", L"Lang", Str, lang), F(L"General", L"MultiInstance", Bool, multiInstance),
+    F(L"General", L"SettingsVersion", Int, settingsVersion), F(L"General", L"Lang", Str, lang), F(L"General", L"MultiInstance", Bool, multiInstance),
     F(L"General", L"RestoreLast", Bool, restoreLast), F(L"General", L"LastFile", Str, lastFile),
     F(L"Window", L"X", Int, wx), F(L"Window", L"Y", Int, wy), F(L"Window", L"W", Int, ww), F(L"Window", L"H", Int, wh),
     F(L"Window", L"Maximized", Bool, maximized), F(L"Window", L"TopMost", Bool, topMost),
@@ -144,6 +144,16 @@ void Settings::Load(const std::wstring& path) {
         std::wstring line = s;
         size_t eq = line.find(L'=');
         if (eq != std::wstring::npos) keys[line.substr(0, eq)] = line.substr(eq + 1);
+    }
+    // one-time migration of settings files written by v1.2.0 or older
+    if (FileExists(path)) {
+        bool hasVer = false;
+        ReadStr(path, L"General", L"SettingsVersion", hasVer);
+        if (!hasVer) {
+            if (dispOpt == DispBigToWnd) dispOpt = DispBigToDesk;
+            fitWindowToToolbar = false;
+            settingsVersion = 2;
+        }
     }
     checkerSize = std::max(2, std::min(64, checkerSize));
     undoMax = std::max(0, std::min(50, undoMax));
